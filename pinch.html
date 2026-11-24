@@ -15,20 +15,39 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
+      background: transparent;
       font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Animated WebGL background layer */
+    /* Outer wrapper gives room for the drop shadow inside the Google Sites iframe */
+    .embed-wrapper {
+      width: 100%;
+      height: 100%;
+      padding: 16px;
+    }
+
+    /* Rounded card container holding both the WebGL canvas and the content */
+    .card-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #1a1210;
+      box-shadow: 0 20px 36px rgba(0, 0, 0, 0.52);
+    }
+
+    /* Animated WebGL background constrained inside the rounded card */
     #glcanvas {
-      position: fixed;
+      position: absolute;
       inset: 0;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       z-index: 0;
       display: block;
     }
 
-    /* Foreground layout matching your Google Sites section */
+    /* Foreground layout */
     .section-layout {
       position: relative;
       z-index: 1;
@@ -78,8 +97,10 @@
       opacity: 0.92;
     }
 
-    /* Stack vertically on narrow mobile screens */
     @media (max-width: 650px) {
+      .embed-wrapper {
+        padding: 10px;
+      }
       .section-layout {
         flex-direction: column;
         gap: 20px;
@@ -94,21 +115,25 @@
 </head>
 
 <body>
-  <canvas id="glcanvas"></canvas>
+  <div class="embed-wrapper">
+    <div class="card-container">
+      <canvas id="glcanvas"></canvas>
 
-  <div class="section-layout">
-    <!-- Left Photo -->
-    <div class="photo-card">
-      <img src="img/pinch.jpg" alt="Ceramic piece">
-    </div>
+      <div class="section-layout">
+        <!-- Left Photo -->
+        <div class="photo-card">
+          <img src="img/pinch.jpg" alt="Ceramic piece">
+        </div>
 
-    <!-- Right Text -->
-    <div class="text-column">
-      <h2>Triumphs</h2>
-      <p>Write what went well with this piece here...</p>
+        <!-- Right Text -->
+        <div class="text-column">
+          <h2>Triumphs</h2>
+          <p>Write what went well with this piece here...</p>
 
-      <h2>Challenges</h2>
-      <p>Write what was difficult or how you solved it here...</p>
+          <h2>Challenges</h2>
+          <p>Write what was difficult or how you solved it here...</p>
+        </div>
+      </div>
     </div>
   </div>
 
