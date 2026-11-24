@@ -18,7 +18,34 @@ void main() {
 }
 `;
 
-// Heavy 2-Pass Separable Gaussian Blur (33-tap effective kernel per pass)
+// 2-Pass Separable Gaussian Blur
+const gaussianBlurFragSource = `#version 300 es
+precision highp float;
+
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_direction;
+uniform float u_radius;
+
+out vec4 fragColor;
+
+void main() {
+  vec4 color = vec4(0.0);
+  float totalWeight = 0.0;
+
+  for (int i = -16; i <= 16; i++) {
+    float fi = float(i);
+    float weight = exp(-(fi * fi) / (2.0 * 64.0));
+    vec2 sampleUV = clamp(v_uv + u_direction * fi * u_radius, 0.002, 0.998);
+    color += texture(u_tex, sampleUV) * weight;
+    totalWeight += weight;
+  }
+
+  fragColor = color / totalWeight;
+}
+`;
+
+// Main Fluid Circles Shader (tuned for subject-in-background photos)
 const mainFragSource = `#version 300 es
 precision highp float;
 
@@ -38,8 +65,7 @@ vec2 RotateAroundCenter(vec2 point, float angle) {
   return rotateCenter + (rot * offset);
 }
 
-// Zoom into the center 55% of the photo so the subject (the blue box) dominates
-// and outer background walls/tables stay mostly out of frame
+// Zoom into the center 45% of the photo so the subject dominates
 vec3 sampleRotatedCover(vec2 offset, float radius, float angle) {
   vec2 uv = ((offset / radius) * 0.45) + 0.5;
   uv = RotateAroundCenter(uv, angle);
@@ -50,26 +76,22 @@ float getChroma(vec3 c) {
   return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
 }
 
-// Favor colorful pixels (blues/oranges) over dull gray/tan background pixels
+// Favor colorful/rich pixels over dull gray/beige background pixels
 vec3 blendChromaWeighted(vec3 base, vec3 orb, float mask) {
   float orbChroma = getChroma(orb);
-  // Colorful pixels get full opacity; dull gray/beige pixels get dialed down
   float chromaWeight = mix(0.35, 1.0, smoothstep(0.05, 0.30, orbChroma));
   return mix(base, orb, mask * chromaWeight);
 }
 
 // Deepen rich colors without tinting neutral highlights
 vec3 gradeSubjectFocus(vec3 color, float saturation, float contrast) {
-  // Lower midpoint (0.38) lifts rich midtones on dark subjects like mahogany/cobalt
   color = clamp((color - 0.38) * contrast + 0.38, 0.0, 1.0);
 
-  // Vibrance boost on colored areas
   float chroma = getChroma(color);
   float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
   float adaptiveSat = mix(1.0, saturation, smoothstep(0.03, 0.25, chroma));
   color = mix(vec3(lum), color, adaptiveSat);
 
-  // Gentle shadow warmth & highlight roll-off so browns stay rich mahogany/amber
   color = pow(max(color, vec3(0.0)), vec3(0.93, 0.97, 1.03));
   color = color / (1.0 + color * 0.15);
 
@@ -115,91 +137,7 @@ void main() {
     col = blendChromaWeighted(col, orbCol, rightMask);
   }
 
-  // Rich cobalt/navy tones with clean highlight protection
   col = gradeSubjectFocus(col, 1.45, 1.4);
-
-  fragColor = vec4(col, 1.0);
-}
-`;
-
-// Main Fluid Circles Shader (with soft feathered edges & saturation boost)
-// Main Fluid Circles Shader (distinct color pockets + contrast)
-const mainFragSource = `#version 300 es
-precision highp float;
-
-uniform float iTime;
-uniform vec2 iResolution;
-uniform sampler2D BlurredCoverArt;
-
-out vec4 fragColor;
-
-const vec2 rotateCenter = vec2(0.5, 0.5);
-
-vec2 RotateAroundCenter(vec2 point, float angle) {
-  vec2 offset = point - rotateCenter;
-  float s = sin(angle);
-  float c = cos(angle);
-  mat2 rot = mat2(c, -s, s, c);
-  return rotateCenter + (rot * offset);
-}
-
-// Sample the full cover art range (0.85 keeps all edge colors in play without corner streaking)
-vec3 sampleRotatedCover(vec2 offset, float radius, float angle) {
-  vec2 uv = ((offset / radius) * 0.85) + 0.5;
-  uv = RotateAroundCenter(uv, angle);
-  return texture(BlurredCoverArt, uv).rgb;
-}
-
-// Boost contrast & vibrance so darks stay deep and accent colors stand out
-vec3 gradeColor(vec3 color, float saturation, float contrast) {
-  // S-curve contrast around midpoint 0.5
-  color = clamp((color - 0.5) * contrast + 0.5, 0.0, 1.0);
-  // Vibrance/saturation boost
-  float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
-  return mix(vec3(lum), color, saturation);
-}
-
-void main() {
-  float largestAxis = max(iResolution.x, iResolution.y);
-  bool isLandscape = iResolution.x > iResolution.y;
-
-  // 1. Base background (tighter radius = more color variation across screen)
-  vec2 bgOrigin = iResolution.xy * 0.5;
-  float bgRadius = largestAxis * 0.75;
-  vec3 col = sampleRotatedCover(gl_FragCoord.xy - bgOrigin, bgRadius, iTime * -0.15);
-
-  // 2. Center orb (slightly off-center drift so it doesn't sit static)
-  vec2 centerOrigin = iResolution.xy * 0.5 + vec2(sin(iTime * 0.2), cos(iTime * 0.17)) * (largestAxis * 0.12);
-  float centerRadius = largestAxis * (isLandscape ? 0.55 : 0.45);
-  vec2 centerOffset = gl_FragCoord.xy - centerOrigin;
-  float centerMask = 1.0 - smoothstep(centerRadius * 0.1, centerRadius, length(centerOffset));
-  if (centerMask > 0.0) {
-    vec3 orbCol = sampleRotatedCover(centerOffset, centerRadius, iTime * 0.25);
-    col = mix(col, orbCol, centerMask * 0.85);
-  }
-
-  // 3. Top-Left orb
-  vec2 leftOrigin = vec2(iResolution.x * 0.15, iResolution.y * 0.85);
-  float leftRadius = largestAxis * 0.55;
-  vec2 leftOffset = gl_FragCoord.xy - leftOrigin;
-  float leftMask = 1.0 - smoothstep(leftRadius * 0.1, leftRadius, length(leftOffset));
-  if (leftMask > 0.0) {
-    vec3 orbCol = sampleRotatedCover(leftOffset, leftRadius, iTime * 0.3 + 1.8);
-    col = mix(col, orbCol, leftMask * 0.85);
-  }
-
-  // 4. Bottom-Right orb
-  vec2 rightOrigin = vec2(iResolution.x * 0.85, iResolution.y * 0.15);
-  float rightRadius = largestAxis * (isLandscape ? 0.5 : 0.45);
-  vec2 rightOffset = gl_FragCoord.xy - rightOrigin;
-  float rightMask = 1.0 - smoothstep(rightRadius * 0.1, rightRadius, length(rightOffset));
-  if (rightMask > 0.0) {
-    vec3 orbCol = sampleRotatedCover(rightOffset, rightRadius, iTime * -0.28 + 3.5);
-    col = mix(col, orbCol, rightMask * 0.85);
-  }
-
-  // Keep dark shadows deep and secondary colors vivid
-  col = gradeColor(col, 1.35, 1.35);
 
   fragColor = vec4(col, 1.0);
 }
@@ -271,8 +209,8 @@ function createFBO(width, height) {
   return { fbo, tex, width, height };
 }
 
-function generateHeavyGaussianBlur(sourceTex, passes = 3, radius = 2.5) {
-  const size = 256; // Compact resolution eliminates banding & boosts blur radius
+function generateHeavyGaussianBlur(sourceTex, passes = 1, radius = 1.4) {
+  const size = 256;
   const ping = createFBO(size, size);
   const pong = createFBO(size, size);
 
@@ -286,14 +224,12 @@ function generateHeavyGaussianBlur(sourceTex, passes = 3, radius = 2.5) {
   let inputTex = sourceTex;
 
   for (let i = 0; i < passes; i++) {
-    // Horizontal pass -> ping
     gl.bindFramebuffer(gl.FRAMEBUFFER, ping.fbo);
     gl.viewport(0, 0, size, size);
     gl.bindTexture(gl.TEXTURE_2D, inputTex);
     gl.uniform2f(dirLoc, 1.0 / size, 0.0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    // Vertical pass -> pong
     gl.bindFramebuffer(gl.FRAMEBUFFER, pong.fbo);
     gl.viewport(0, 0, size, size);
     gl.bindTexture(gl.TEXTURE_2D, ping.tex);
@@ -319,7 +255,7 @@ let blurredCoverTexture = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, blurredCoverTexture);
 gl.texImage2D(
   gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0,
-  gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([15, 15, 20, 255])
+  gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([26, 18, 16, 255])
 );
 
 function loadAndBlurCover(url) {
@@ -336,7 +272,7 @@ function loadAndBlurCover(url) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    const newBlurred = generateHeavyGaussianBlur(rawTex, 3, 2.5);
+    const newBlurred = generateHeavyGaussianBlur(rawTex, 1, 1.4);
     gl.deleteTexture(blurredCoverTexture);
     gl.deleteTexture(rawTex);
     blurredCoverTexture = newBlurred;

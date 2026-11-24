@@ -1,30 +1,117 @@
 <!doctype html>
-<html class="no-js" lang="">
+<html lang="en">
 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WebGL2 Cover Art Shader</title>
-  <link rel="stylesheet" href="css/style.css">
+  <title>Triumphs & Challenges</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #000;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
+
+    /* Animated WebGL background layer */
     #glcanvas {
-      display: block;
+      position: fixed;
+      inset: 0;
       width: 100vw;
       height: 100vh;
+      z-index: 0;
+      display: block;
+    }
+
+    /* Foreground layout matching your Google Sites section */
+    .section-layout {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      width: 100%;
+      height: 100%;
+      padding: 32px 48px;
+      color: #ffffff;
+    }
+
+    .photo-card {
+      flex: 0 0 auto;
+      width: 280px;
+      max-width: 40%;
+      aspect-ratio: 3 / 4;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .photo-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .text-column {
+      flex: 1;
+      max-width: 520px;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    }
+
+    .text-column h2 {
+      margin: 0 0 8px 0;
+      font-size: 1.75rem;
+      font-weight: 700;
+    }
+
+    .text-column p {
+      margin: 0 0 24px 0;
+      font-size: 1rem;
+      line-height: 1.5;
+      opacity: 0.92;
+    }
+
+    /* Stack vertically on narrow mobile screens */
+    @media (max-width: 650px) {
+      .section-layout {
+        flex-direction: column;
+        gap: 20px;
+        padding: 20px;
+        text-align: center;
+      }
+      .photo-card {
+        width: 160px;
+      }
     }
   </style>
 </head>
 
 <body>
   <canvas id="glcanvas"></canvas>
+
+  <div class="section-layout">
+    <!-- Left Photo -->
+    <div class="photo-card">
+      <img src="img/box.jpg" alt="Ceramic piece">
+    </div>
+
+    <!-- Right Text -->
+    <div class="text-column">
+      <h2>Triumphs</h2>
+      <p>Write what went well with this piece here...</p>
+
+      <h2>Challenges</h2>
+      <p>Write what was difficult or how you solved it here...</p>
+    </div>
+  </div>
+
   <script src="js/box.js"></script>
 </body>
 
